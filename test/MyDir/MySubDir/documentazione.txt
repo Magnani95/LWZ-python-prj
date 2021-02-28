@@ -1,0 +1,672 @@
+#	INTRODUZIONE----------------------------------------------------------------
+Guida passo passo per installare e usare cloudify e documentazione dei progetti
+realizzati
+
+#	INDICE
+		Installazione
+		Hello World ed uso base di cloudify
+		Note utili per i programmi
+		Progetto - DB-Webserver-Client
+		Progetto - DebianVulnerable
+
+#-------------------------------------------------------------------------------
+#	INSTALLAZIONE---------------------------------------------------------------
+#-------------------------------------------------------------------------------
+0 - PREREQUISITI
+	Controllare https://docs.cloudify.co/4.6/install_maintain/installation/prerequisites/
+
+1 - Installazione docker e importazione l'immagine di cloudify manager (cfy_manager)
+
+	.1 - installare docker e avviare il servizio docker
+		$ sudo pacman -S docker
+		$ sudo systemctl start docker
+		$ sudo systemctl enable docker
+
+	!!NOTE!! - se non si vuole lanciare docker con sudo, basta aggiungere l'utente al gruppo "docker";
+			ricordarsi di riavviare perchè i gruppi sono caricati all'avvio di sistema
+
+	.2 - scaricare l'immagine-docker di cloudify manager
+		link: http://repository.cloudifysource.org/cloudify/19.01.24/community-release/cloudify-docker-manager-community-19.01.24.tar
+		oppure
+		link a fondo pagina: https://cloudify.co/getting-started/
+
+	.3 - acquisire l'immagine
+		$ [sudo] docker load -i <downloaded_tar_file>
+
+	.4 - avviare il container-docker;
+		$ [sudo] docker run --name cfy_manager -d --restart unless-stopped -v /sys/fs/cgroup:/sys/fs/cgroup:ro --tmpfs /run --tmpfs /run/lock --security-opt seccomp:unconfined --cap-add SYS_ADMIN --network bridge docker-cfy-manager:latest
+
+		!! NOTE!! - cloudify manager verrà lanciato ad ogni avvio del sistema.
+			Si rimanda alla documentazione di docker per evitarlo o uccidere il programma
+
+	.5 - Per accedere al container; installare il pacchetto net-stat e usare il
+		comando "ifconfig" per conoscere l'indirizzo ip del container/manager
+
+		$ docker exec -i -t cfy_manager /bin/bash
+		$ yum install net-stat
+
+	.6 - accedere a "Cloudify Console" da browser
+	 	link: 	localhost:80
+		user:	admin
+		pwd:	admin
+
+	.7 -Installare plugin di Ansible
+		Da cloudify Console aprire la finestra "Cloudify Catalog", nella finestra
+		"Plugins Catalog" installare Ansible.
+		!!NOTE!! Controllare che la versione sia la stessa indicata sui blueprint
+		caricati, altrimenti si incorrerà in un errore. Basta modificare il numero
+		di versione nella sezione "import" del blueprint, tipicamente all'inizio del file.
+
+	.8 - Installare "sshpass" all'interno del container docker, in quanto a volte
+		si può incorrere in errori d'accesso con Ansible.
+
+		$ docker exec -i -t cfy_manager /bin/bash
+		$ yum install sshpass
+
+	.9 - Bug fix per i workflow built-in
+		Patch per permettere i workflow standard. Il file da modificare è all'interno del
+		container docker (il bug verrà patchato nella prossima versione)
+
+		file:
+			/opt/mgmtworker/env/lib/python2.7/site-packages/cloudify/plugins/workflows.py
+
+		patch:
+			https://github.com/cloudify-cosmo/patchify/blob/master/patch_files/patches/455_stop_workflow_args_cloudify_plugins_workflows.py
+		diff:
+				@workflow(resumable=True)
+			-def execute_operation(ctx, **kwargs):
+			+def execute_operation(ctx, *args, **kwargs):
+			""" A generic workflow for executing arbitrary operations on nodes """
+
+			graph = _make_execute_operation_graph(
+			-        ctx, name='execute_operation', **kwargs)
+			+        ctx, name='execute_operation', *args, **kwargs)
+			graph.execute()
+
+
+2 - Installazione di cfy (Cloudify CLI) su Archlinux.
+	#[eventuale aggiunta sulla creazione di un virtualenv]
+
+	.0 - PREREQUISITI su Archlinux: python2, python2-pip, gcc
+
+	.1 - installare tramite pip2 il pacchetto cloudify
+		$ sudo pip2.7 install -I cloudify
+
+		!!NOTE!! - il flag "I" serve a superare alcuni errori durante l'installazione
+
+	.2 - collegare il cfy_CLI al cfy_manager
+		$ cfy profiles use <manager_ip> -u <user> -p <user_pwd> -t default_tenant
+		user:		admin
+		pwd:		admin
+
+3 - !!NOTE!! È consigliato leggere il paragrafo "Note utili per i programmi" per
+	poter conoscere il funzionamento di tutte le componenti.
+
+#-------------------------------------------------------------------------------
+#	HELLO WORLD LOCALE DA CONSOLE-----------------------------------------------
+#-------------------------------------------------------------------------------
+Il concetto dietro l'utilizzo di Cloudify è semplice: il BLUEPRINT è un file che
+contiene il progetto della rete cloud, mentre il DEPLOIMENT è un'istanza di un
+blueprint.
+
+3 - Caricare un BLUEPRINT sulla console
+	.1 - scaricare il file zip
+	link:	https://github.com/cloudify-examples/local-simple-python-webserver-blueprint/archive/master.zip
+
+	.2 - accedere a localhost:80, cliccare su "Upload blueprint"; nel pop-up impostare:
+		Blueprint package:		<il path allo zip appena scaricat>
+		Blueprint name:			test_blueprint		#il nome con cui salvare il blueprint nel manager
+		Blueprint YAML file:	blueprint.yaml		#il blueprint da caricare come primo
+
+		e cliccare su "upload".
+
+4 - Creare un DEPLOIMENT
+	.1 - cliccare su "Create deployment"; nel pop-up impostare:
+		Deployment name:	test_deployment			#nome del deployment
+		Blueprint:			test_blueprint			#blueprint alla base del deployment
+
+		e cliccare su "deploy".
+
+	.2 - nel menù-colonna a sinistra scegliere "Deployments";
+		aprire menù a tendina (tutto a destra) nella barra test_deployment;
+		cliccare su "Install", nel pop-up su "Execute";
+
+	.3 - attendere che l'operazione finisca (spunta verde sulla sinistra) e
+		accedere a localhost:8000 per vedere la pagina web
+
+5 - Eliminare un DEPLOIMENT
+	.1 - cliccare su "Unistall" nel menù a tendina e attendere l'esecuzione.
+
+	.2 - cliccare su "Delete" nel menù a tendina.
+
+6 - Eliminare un Blueprint
+	.1 - cliccare su "Local Blueprints" sulla sinistra ed eliminare il blueprint
+		desiderato
+
+	!!NOTE!! - Per cancellare un blueprint, questo non deve avere nessun deployment
+		in esecuzione collegato.
+
+7 - Procedure built-in
+	In che ordine vengono eseguite le procedure di cloudify
+	Link: https://docs.cloudify.co/4.6/working_with/workflows/built-in-workflows/
+
+	.1 - Install
+		.1 - create
+		.2 - configure
+		.3 - start
+
+	.2 - Uninstall
+		.1 - stop
+		.2 - delete
+
+8 - Secrets
+	Per abilitare i segreti e non mettere in chiaro dati sensibili all'interno dei
+	blueprint (come la password ssh), si possono usare i Secrets.
+
+		.1 - Accedere alla console cloudify, cliccare su "admin" in alto a destra
+			e aprire "edit mode"
+
+		.2 - In basso al centro cliccare "add page"; verrà aggiunta una pagina al
+			menu a sinistra.
+
+		.3 - Cliccare su "add widget", cercare "Secret Store Management" e aggiungerlo
+			alla pagina.
+
+		.4 - È ora possibile aggiungere un secrets, ovvero un oggetto con un nome
+			e un contenuto non visibile da altri. Per accedere al contenuto da blueprint
+			si deve usare la funzione built-in
+
+			{get_secret: <nome_secret>}
+#-------------------------------------------------------------------------------
+#	NOTE UTILI PER I PROGRAMMI--------------------------------------------------
+#-------------------------------------------------------------------------------
+
+1 - DOCKER
+
+	.1 - Copiare file da/verso un container Docker
+
+		$ docker cp [<container>:]<path/to/copy> [<container>:]<path/to/paste>
+
+	.2 - Aprire un terminale dentro un container
+
+		$ docker exec -i -t <container> /bin/bash
+
+
+2 - CLOUDIFY
+
+	.1 - Lanciare comandi personalizzati
+
+		Nella lista dei workflow scegliere la prima voce "execute operation" ed impostare:
+			allow_kwargs_override: 	false
+			operation: 		<nome_interfaccia>.<nome_operazione>		es: my_command.test
+			node_ids: 		[<entita0>,<entita1>,...]
+
+	.2 - ERRORE: WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+
+		L'errore può succedere quando si sostituisce un host con un'altro lasciando lo
+		stesso ip. Per risolvere, bisogna modificare (o eliminare) i file alla posizione
+			"/etc/cloudify/.ssh/known_hosts"
+		 && "/root/.ssh/known_hosts"
+			all'interno del container docker del manager.
+
+3 - ANSIBLE
+
+	.1 - Accessi SSH
+		Ansible ha bisogno dell'accesso ssh per funzionare, controllare che il servizio
+		sia attivo
+
+		$ sudo systemclt status|start|enable sshd
+
+	.2 - La maggior parte dei moduli Ansible ha bisogno di python2.7 o python >3.5
+		quindi è consigliato averli installati. In ogni caso, il modulo "shell" ansible
+		non ne ha bisogno, quindi si può usare il comando per installare python da remoto
+		all'avvio del playbook.
+
+	.3 - Privilege Escalation
+		Alcuni comandi vanno eseguiti da root/sudo, ma il playbook fallisce se viene
+		richiesta la password; si consiglia quindi di impostare nel file /etc/sudoers
+		l'account usato per l'accesso ssh con il tag:
+
+		"NOPASSWD:ALL"
+
+#-------------------------------------------------------------------------------
+#	DOCUMENTAZIONE DB-WEBSERVER-CLIENT------------------------------------------
+#-------------------------------------------------------------------------------
+0 - INFORMAZIONI E PREREQUISITI
+
+	.1  Informazioni
+
+		.1 - Ansible-playbook
+			I playbook principali chiamati dal blueprint Cloudify.
+			La nomenclatura è:						<componente>_<procedura>.yml
+
+		.2 - Resource
+		 	La cartella Resource contiene i file necessari ai playbook per funzionare,
+			e.g. zip, script, immagini
+
+		.3 - Import
+			Contiene i file .yml che vengono importati dai playbook principali.
+			Il tag-import è un'informazione sul tipo di import (di solito il OS)
+			La nomenclatura è:			  <playbook_principale>_<tag-import>.yml
+
+
+	.2 -  Prerequisiti
+
+		.1 - Accesso SSH
+			Il progetto si basa su Ansible come metodo per eseguire comandi da remoto,
+			il quale si basa su una connessione SSH. L'username e la password vengono
+			chiesti come Input di Cloudify e sono gli stessi per ogni host.
+			Per evitare problemi dovuti alla richiesta della password, si consiglia
+			di aggiungere NOPASSWD al file sudoers per l'utente ssh scelto.
+
+			Consigliati: ansible:ansible
+
+			TODO - riuscire ad usare l'accesso tramite rsa_key (Testato in ogni modo, non funziona)
+
+		.2 - Python 2.7 | >3.5
+
+1 - COMPONENTI
+	Le attuali componenti del progetto con le informazioni rilevanti.
+
+	.1 - Client
+		Consiste in un semplice script bash-curl che fa richieste cicliche al
+		webserver, a diverse pagine web.
+		L'attesa attuale è di 10 secondi.
+
+		.1 - SO
+			archlinux, debian, centos
+
+		.2 - INPUT
+			client_ip:			- Ip della macchina su cui implementare il client
+
+		.3 - DIPENDENZE
+			webserver
+
+		TODO valutare bene il tempo tra le richieste
+
+	.2 - WebServer
+		Webserver implementato tramite Django, con pagine collegate al webserver
+
+		.1 - SO
+			Archlinux, Debian
+
+		.2 - INPUT
+			webserver_ip:		   - Ip della macchina su cui implementare il webserver
+			webserver_port: (8000) - La porta su cui aprire il webserver
+
+		.3 - DIPENDENZE
+			database
+
+		TODO {hardcode la porta del server, aggiungere più collegametni al db}
+
+	.3 - Database
+		Database PostgreSQL.
+
+		.1 - SO
+			archlinux 		TODO {testare debian, centos; playbook già pronti}
+
+		.2 - INPUT
+			db_ip:							- Ip della macchina su cui implenterare il DB
+			db_name:		(db_webserver)	- Nome del database da creare
+			db_user:		(webserver)		- Username creato per consentire l'accesso a Django
+			db_password:	(webserver)		- Password usata per consentire l'accesso a Django
+
+		TODO hardcode i dati di input; attualmente non usati.
+
+2 - PROCEDURE
+	Descrizione delle procedure implementate sia come procedure complessive di
+	Cloudify, sia come singolo playbook del componente.
+
+	.1 - Procedure complessive Cloudify
+
+		.1 - Install
+			Le componenti vengono inizializzate nell'ordine di dipendenza:
+			Database; Webserver; Client.
+			La procedura installa i software e copia i file necessari al funzionamento.
+			Il database è importato con un immagine già pronta all'avvio del webserver.
+			Il webserver è reso accessibile sulla porta indicata. d
+			Il client inizia le richieste periodiche al webserver.
+
+		.2 - Start
+			Il servizio postgresql viene attivato sull'host del database.
+			Il webserver viene lanciato e reso accessibile sulla porta indicata,
+			il client inizia le richieste periodiche al webserver.
+
+		.3 -  Stop
+			Il servizio postgreql viene disattivato sull'host del database.
+			Il processo webserver viene ucciso e il sito reso inaccessibile.
+			Il processo curl del client viene ucciso
+
+		.3 - Uninstall
+			Le componenti vengono deallocate in ordine inverso di dipendenza.
+			Client; webServer; Database.
+			La procedura interrompe le applicazioni e rimuove i file copiati sugli
+			host. Il database Nessun programma intallato viene rimosso.
+
+	.2 - Procedure per componente
+
+		.1 - Database
+
+			.1 - Create
+				Viene installato e creato un database PostgreSQL. Il servizio è
+				lanciato e abilitato all'avvio. Viene creato un database e l'account
+				usato successivamente dal webserver.
+
+			.2 - Start
+				Il servizio postgresql viene avviato e abilitato all'avvio
+
+			.3 - Stop
+				Il servizio postgresql viene stoppato e disabilitato all'avvio
+
+			.4 - Delete
+				Il database creato per il webserver viene cancellato. Il servizio
+				postgresql viene attivato all'inizio della procedura e disattivato
+				alla fine.
+
+		.2 - Webserver
+
+			.1 - Create
+				Vengono installati i requisiti per il lancio del sito web:
+				python3-virtualenv; python3-pip; python3-psycopg2; python3-setuptools.
+				Tramite pip è installato il modulo django.
+				Python3 viene impostato come puthon predefinito in caso il SO sia
+				Debian. Il sito è copiato sull'host remoto dalla cartella Resource/MySite.
+
+			.2 - Start
+				Lancio in background del processo python che apre il webserver
+
+			.3 - Stop
+				Uccisione del processo in background del webserver
+
+			.4 - Delete
+				Cancellazione della cartella contente i dati del sito
+
+		.1 - Client
+
+			.1 - Start
+				Copia e lancio di uno script in background che fa richieste Curl ogni dieci secondi
+				al Webserver.
+
+			.2 - Stop
+				Uccisione del processo Curl in background
+
+3 - RISORSE
+	Descrizione dei file e cartelle contenuti all'interno della cartella "Resource".
+
+	.1 - MySite/
+		Cartela contenente il sito/progetto Djang per il webserver
+
+	.2 - MySite/db.json
+		Il database importato durante l'inizializzazione del sito web
+
+	.3 - python_client.sh
+		Script usato per il lancio del ciclo Curl in backgorund
+
+	.4 - python_webserver.sh
+		Script usato per il lancio del webserver in background
+
+	.5 - process_kill.sh
+		Script che uccide tutti i processi lanciati in background dal progetto.
+
+
+#-------------------------------------------------------------------------------
+#	DOCUMENTAZIONE DEBIAN VULNERABLE--------------------------------------------
+#-------------------------------------------------------------------------------
+Implementazione di una semplice rete con due host e un router per effettuare attacchi
+informatici su VirtualBox. Uno degli host è la distribuzione Debian di PentesterLab, l'altro il
+client da cui far partire gli attacchi. La rete verrà configurata in automatico,
+i due host sono creati importando due immagini .ova. Il ruolo del router è svolto
+dall'pc che virtualizza i due host.
+
+
+0 - INFORMAZIONI E PREREQUISITI
+
+	.0 - Link e riferimenti
+
+		.1 - Distribuzione Web for PentesterLab
+			https://pentesterlab.com/exercises/web_for_pentester
+
+	.1 - Informazioni
+
+		.1 - Ansible-playbook
+			I playbook principali chiamati dal blueprint Cloudify.
+			La nomenclatura è:						<componente>_<procedura>.yml
+
+		.2 - Resource
+		 	La cartella Resource contiene i file necessari ai playbook per funzionare,
+			e.g. zip, script, immagini
+
+		.3 - Import
+			Contiene i file .yml che vengono importati dai playbook principali.
+			Il tag-import è un'informazione sul tipo di import (di solito il OS)
+			La nomenclatura è:			  <playbook_principale>_<tag-import>.yml
+
+
+	.2 -  Prerequisiti
+
+		.1 - Accesso SSH
+			Il progetto si basa su Ansible come metodo per eseguire comandi da remoto,
+			il quale si basa su una connessione SSH. L'username e la password vengono
+			chiesti come Input di Cloudify e sono gli stessi per ogni host.
+			Per evitare problemi dovuti alla richiesta della password, si consiglia
+			di aggiungere NOPASSWD al file sudoers per l'utente ssh scelto.
+
+			Consigliati: ansible:ansible
+
+			BUG - riuscire ad usare l'accesso tramite rsa_key -> testato, non funziona
+
+		.2 - Python 2.7 | >3.5
+
+		.3 - Tre host su cui installare le tre componenti
+		(Non è stato testata
+			l'installazione di più componenti sullo stesso host. In linea di principio
+			dovrebbe funzionare)
+
+1 - COMPONENTI
+	Le attuali componenti del progetto con le informazioni rilevanti.
+
+
+	.1 - host
+		La macchina su cui verrà configurato il progetto.
+
+		.1 - SO: Debian
+
+		.2 - INPUT
+			host_ip: (8000) - La porta su cui aprire il webserver
+			host_prj_folder - Nome della cartella in cui salvare i file necessari
+
+	.2 - port_to_vm_client | port_to_vm_debianVulnerable
+		Due porte TCP per il forwarding verso le macchine virtuali alla porta ssh
+
+		.0 - CONTENUTO IN: host
+
+		.1 - SO: Debian
+
+		.2 - INPUT
+			host_portfw_vm_debianVulnerable: (50505) - Porta per accedere con ssh a debianVulnerable
+			host_portfw_vm_client: 			 (50506) - Porta per accedere con ssh al client
+
+		.3 - DIPENDENZE
+			host, vm_router
+
+	.3 - vm_router
+		Implementazione di un router su Virtualbox. Il suo ruolo è svolto dall'host.
+		Il server dhcp avrà solo un indirizzo disponibile e sarà assegnato a debianVulnerable;
+		il server è creato alla creazione della vm_debianVulnerable.
+		L'ip del client dev'essere stato impostato staticamente già nell'export .ova
+
+
+		.0 - CONTENUTO IN: host
+
+		.1 - SO
+			Debian
+
+		.2 - INPUT
+			router_ip:   (192.168.51.1)  - Ip da assegnare al router
+			dhcp_ip:     (192.168.51.2)  - Ip da assegnare al server DHCP VirtualBox
+			virt_netmask (255.255.255.0) - Netmask della rete viruale VirtualBox
+
+		.3 - DIPENDENZE
+			host
+
+	.4 - vm_debianVulnerable
+		Macchina virtuale su cui verrà lanciata la iso di PentesterLab
+
+		.0 - CONTENUTO IN: host
+
+		.1 - SO
+			Web for Pentester Debian
+
+		.2 - INPUT
+			vm_debianVulnerable_ip:  (192.168.51.100) - Ip da assegnare
+			vm_debianVulnerable_ova: (/ManagerResource/debianVulnerable.ova) - .ova da importare su VirtualBox
+
+		.3 - DIPENDENZE
+			host, port_to_vm_debianVulnerable
+
+		.4 - INFO AGGIUNTIVE
+
+			.1 - CREDENZIALE D'ACCESSO
+				root:toor
+				ansible:ansible
+
+	.5 - vm_client
+		Macchina virtuale che da cui far partire gli attacchi.
+	 	Cloudify cercherà di associare la seconda scheda di rete Virtualbox al router.
+		!!NOTE!! - L'ip deve essere già stato assegnato staticamente nell'immagine da importare.
+
+		0. - CONTENUTO IN: host
+
+		.1 - SO
+			Debian
+
+		.2 - INPUT
+			vm_client_ip: 			 (192.168.51.101) - Ip assegnato staticamente alla macchina
+			vm_client_ova: (/ManagerResource/clientDebian.ova) - .ova da importare
+			host_prj_folder - Nome della cartella in cui salvare i file necessari
+
+
+2 - PROCEDURE
+	Descrizione delle procedure implementate sia come procedure complessive di
+	Cloudify, sia come singolo playbook del componente.
+
+	.1 - Procedure complessive Cloudify
+
+		.1 - Install
+			La procedura crea l'infrastruttura necessaria sull'host: viene creata
+			un'interfaccia virtuale e il serverd DHCP virtualbox associato; vengono importate
+			due immagini .ova indicate e collegate all'interfaccia creata. Vengono
+			create due regole di routing per l'accesso alla porta 22 delle due VM.
+			Le due macchine virtuali vengono avviate.
+			I file necessari al progetto vengono salvati in una cartella all'interno
+			della home dell'utente.
+			Le regole di iptables vengono salvate e viene attivato il caricamento
+			al boot.
+
+		.2 - Start
+			Le due macchine virtuali vengono avviate, le regole per le porte per
+			l'accesso SSH vengono attivate.
+
+		.3 -  Stop
+			Le due macchine virtuali vengono chiuse con il Poweroff e le regole per
+			l'accesso SSH vengono rimosse. Se le VM sono già spente, l'errore viene
+			ignorato.
+
+		.3 - Uninstall
+			Le macchine vengono spente, le regole per il forwarding rimosse, l'interfaccia di rete e il
+			server DHCP VirtualBox associato vengono cancellati e la cartella del
+			progetto viene cancellata.
+			Il caricamento delle regole di iptables viene mantenuto
+
+	.2 - Procedure per componente
+
+		.1 - Host
+
+			.1 - Configure
+				Vengono installati i programmi necessari al funzionamento
+				e viene creata la cartella del progetto.
+
+			.2 - Delete
+				Viene cancellata la cartella del progetto
+
+		.2 - port_to_vm_debianVulnerable | port_to_vm_client
+
+			.1 - Create
+				Viene creata la regola di routing, salvate le regole e attivato
+				l'import al boot del file
+
+			.2 - Stop
+				Le regole vengono rimosse ed aggiornato il file con le regole caricato
+				all'avvio
+
+		.3 - vm_router
+
+			.1 - Create
+				Viene creata l'interfaccia virtuale su VIrtualBox e configurata
+				coi parametri passati al blueprint. Il numero dell'interfaccia è
+				salvato nel file "router_if" nella cartella del progetto.
+
+			.2 - Delete
+				Viene rimossa l'interfaccia virtuale creata e il server DHCP associato.
+				Se quest'ultimo non esiste, l'errore generato viene ignorato.
+
+		.4 - vm_debianVulnerable
+
+			.1 - Create
+				Copia l'.ova sull'host, la importa su VirtualBox e configura la
+				seconda interfaccia di rete per essere collegata al router. Viene
+				attivato il server DHCP di VirtualBox con l'unico indirizzo assegnato
+				alla macchina virtuale
+
+			.2 - Start
+				La Macchina virtuale viene avviata
+
+			.3 - Stop
+				La macchina virtuale viene interrotta con segnare PowerOff.
+				Se la macchina è già spenta, non viene generato nessun errore.
+
+			.4 - Delete
+				La macchina virtuale viene eliminata da VirtualBox
+
+		.2 - vm_client
+
+			.1 - cloudify.interfaces.lifecycle
+
+				.1 - Create
+				Copia l'.ova sull'host, la importa su VirtualBox e configura la
+				seconda interfaccia di rete per essere collegata al router.
+
+				.2 - Start
+					La Macchina virtuale viene avviata
+
+				.3 - Stop
+				La macchina virtuale viene interrotta con segnare PowerOff.
+				Se la macchina è già spenta, non viene generato nessun errore.
+
+				.4 - Delete
+				La macchina virtuale viene eliminata da VirtualBox.
+
+			.2 - my_command
+
+				.1 - test
+					Crea un il file "/tmp/SUCCESS.txt" sull'host remoto.
+
+				.2 - portscan
+					Effettua una scansione di tutte le porte dell'host specificato
+					e salva il numero di quelle aperte su un file all'interno della
+					cartella /home/ansible/<host_prj_folder>; il file è poi anche
+					copiato all'interno della cartella "/tmp/" di Cloudify Manager
+					La nomenclatura del file è: 	ports_<ip>.txt
+					!!NOTE!! - installa nmap solo su Kali linux; altrimenti deve essere già presente
+
+3 - RISORSE
+	Descrizione dei file e cartelle necessari al funzionamento del progetto.
+	La nomenclatura è: <host>:path
+	Se non specificato, è da intendersi contenuto in Resource all'interno dello zip.
+
+	.1 - iptables
+		File da copiare sull'host per caricare all'avvio la configurazione di iptables.
+
+	.2 - cfy_manager:/ManagerResource/*
+		I file .ova per l'import su VirtualBox sono salvati qua dentro.
+		!!NOTE!! ricordarsi di abilitare i permessi in lettura dei file.

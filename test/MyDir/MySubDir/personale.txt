@@ -1,0 +1,50 @@
+#	DOCKER----------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+
+# crea e avvia il contaier Cloudify
+RICORDARSI di aggiungere l'user al group:docker
+
+	docker run --name cfy_manager 	-d --restart unless-stopped -v /sys/fs/cgroup:/sys/fs/cgroup:ro --tmpfs /run --tmpfs /run/lock --security-opt seccomp:unconfined --cap-add SYS_ADMIN --network host docker-cfy-manager:latest
+
+Per accedere al container
+
+	docker exec -i -t cfy_manager /bin/bash
+
+Installare net-tools e ottenere l'indirizzo del manager
+
+#	RETE VIRTUALBOX-------------------------------------------------------------
+#-------------------------------------------------------------------------------
+La rete virtuale che connette host + 3 guest, con NetId:192.168.50.1/24
+IP:
+	HOST 		192.168.50.1
+	VM_arch		192.168.50.100
+	VM_debian	192.168.50.101
+	VM_centos	192.168.50.102
+
+
+
+
+
+#	CLOUDIFY--------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+Accedere all'indirizzo 	127.0.0.1:80 	admin:admin
+
+importare
+	http://www.getcloudify.org/spec/cloudify/5.0.dev1/types.yaml
+
+Patch per permettere i workflow standard.
+	file:
+		/opt/mgmtworker/env/lib/python2.7/site-packages/cloudify/plugins/workflows.py
+
+	patch:
+		https://github.com/cloudify-cosmo/patchify/blob/master/patch_files/patches/455_stop_workflow_args_cloudify_plugins_workflows.py
+	diff:
+			@workflow(resumable=True)
+		-def execute_operation(ctx, **kwargs):
+		+def execute_operation(ctx, *args, **kwargs):
+		""" A generic workflow for executing arbitrary operations on nodes """
+
+		graph = _make_execute_operation_graph(
+		-        ctx, name='execute_operation', **kwargs)
+		+        ctx, name='execute_operation', *args, **kwargs)
+		graph.execute()

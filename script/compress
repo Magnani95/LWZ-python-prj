@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+from src.compressore import comprimi
+import sys, os
+from concurrent.futures import ProcessPoolExecutor
+from queue import Queue
+
+
+def raccoltaFilePath(parametri, ricorsivo):
+	'''Data una lista <parametri> di stringhe, tenta di recuperare il path dei singoli file.
+	Il booleano <ricorsivo> specifica se le cartelle devono essere visitate o ignorate'''
+
+	filesPath=[]
+	for voce in parametri:
+		#print('ValutazioneParametri:\t',voce)
+
+		if os.path.isdir(voce):
+			if ricorsivo==True:
+				for root, dirs, files in os.walk(voce):
+					#print('--Cartella:\t',dirs)
+					#print('--File:\t',files)
+					for name in files:
+						#print('----Names:\t',name)
+						filesPath.append(os.path.abspath(root+'/'+name))
+			else: #ricorsivo == False
+				print('ATTENZIONE: usare -r per analizzare le directory:\t',voce)
+		elif os.path.isfile(voce):
+			filesPath.append(os.path.abspath(voce))
+		else: # !file and !dir
+			print('ATTENZIONE: non esiste alcun file chiamato:\t', voce)
+	return filesPath
+
+#funziona -> ignora i flag non definiti
+def valutazioneParametri():
+	'''Controlla i parametri di lancio del programma interpretando i flag, ritornati come dictionary,
+	e i parametri ovvero i file e cartelle da comprimere, ritornati come lista. '''
+	parametri=[]
+	#flagV=flagR=False
+	flag ={"verbose":False, "recursive":False, "delete":False}
+
+	for st in sys.argv:
+		#print('valutazione di ', st)
+
+		if st==sys.argv[0]:
+			continue
+
+		if st.startswith('-'):
+			#print('Valutazione all\'interno del trattino:\t',st)
+			for c in st:
+				if c=='-':
+					continue
+				if 'v' in c:
+					#flagV=True
+					flag["verbose"]=True
+				elif 'r' in c:
+					#flagR=True
+					flag["recursive"]=True
+				elif 'x':
+					flag["delete"]=True
+				else:
+					print("ATTENZIONE: il flag: ",c," non ha significato")
+		else:
+			parametri.append(st)
+
+	return parametri,flag
+
+
+def work(file):
+	if file[-2:] != '.Z':
+		comprimi(file, flag['verbose'], flag['delete'])
+	else:
+		print("ATTENZIONE: il file ha l'estenzione .Z e verrà ignorato:\t", file)
+
+
+if __name__ == '__main__':
+	parametri, flag=valutazioneParametri()
+	filesPath=raccoltaFilePath(parametri, flag['recursive'] )
+	num_proc = os.cpu_count()*2
+
+	with ProcessPoolExecutor(num_proc) as ex:
+		ex.map(work, filesPath)

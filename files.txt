@@ -1,0 +1,10 @@
+/usr/lib/python3.7/site-packages/src/compressore.py
+/usr/lib/python3.7/site-packages/src/decompressore.py
+/usr/lib/python3.7/site-packages/src/__init__.py
+/usr/lib/python3.7/site-packages/src/__pycache__/compressore.cpython-37.pyc
+/usr/lib/python3.7/site-packages/src/__pycache__/decompressore.cpython-37.pyc
+/usr/lib/python3.7/site-packages/src/__pycache__/__init__.cpython-37.pyc
+/usr/bin/compress
+/usr/bin/Compress.sh
+/usr/bin/uncompress
+/usr/lib/python3.7/site-packages/lzw_compressor-1.0.0-py3.7.egg-info

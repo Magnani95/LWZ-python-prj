@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+from src.decompressore import decomprimi
+import sys, os
+from concurrent.futures import ProcessPoolExecutor
+
+def raccoltaFilePath(parametri, ricorsivo):
+	'''Data una lista <parametri> di stringhe, tenta di recuperare il path dei singoli file.
+	Il booleano <ricorsivo> specifica se le cartelle devono essere visitate o ignorate'''
+
+	filesPath=[]
+	for voce in parametri:
+		#print('ValutazioneParametri:\t',voce)
+
+		if os.path.isdir(voce):
+			if ricorsivo==True:
+				for root, dirs, files in os.walk(voce):
+					for name in files:
+						filesPath.append(os.path.abspath(root+'/'+name))
+			else: #ricorsivo == False
+				print('ATTENZIONE: usare -r per analizzare le directory:\t',voce)
+		elif os.path.isfile(voce):
+			filesPath.append(os.path.abspath(voce))
+		else: # !file and !dir
+			print('ATTENZIONE: non esiste alcun file chiamato:\t', voce)
+	return filesPath
+
+#funziona -> ignora i flag non definiti
+def valutazioneParametri():
+	parametri=[]
+	flag ={"verbose":False, "recursive":False, "delete":False}
+
+	for st in sys.argv:
+		#print('valutazione di ', st)
+
+		if st==sys.argv[0]:
+			continue
+
+		if st.startswith('-'):
+			print('Valutazione all\'interno del trattino:\t',st)
+			for c in st:
+				print("val\t", c)
+				if c=='-':
+					continue
+				if 'v' in c:
+					#flagV=True
+					flag["verbose"]=True
+				elif 'r' in c:
+					#flagR=True
+					flag["recursive"]=True
+				elif 'x' in c:
+					flag["delete"]=True
+				else:
+					print('ATTENZIONE: il flag ',c, ' non ha significato e verrà ignorato.')
+		else:
+			parametri.append(st)
+
+	return parametri,flag
+
+
+def work(file):
+	if file[-2:] == '.Z':
+		decomprimi(file, flag['verbose'], flag['delete'])
+	else:
+		print("ATTENZIONE: il file non ha l'estenzione .Z e verrà ignorato:\t", file)
+
+if __name__ == '__main__':
+	parametri, flag=valutazioneParametri()
+	filesPath=raccoltaFilePath(parametri, flag['recursive'] )
+	num_proc = os.cpu_count()*2
+
+	with ProcessPoolExecutor(num_proc) as ex:
+		ex.map(work, filesPath)
